@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
 import {
   ReactFlow,
   Background,
@@ -27,13 +27,30 @@ const nodeTypes: NodeTypes = {
   consumerNode: ConsumerNode,
 }
 
+// Runs inside <ReactFlow> so it has access to the flow instance.
+// Pushes layout changes from the store directly into React Flow's internal
+// state (which ignores position prop updates after the initial render).
+function LayoutSyncer() {
+  const { setNodes, setEdges, fitView } = useReactFlow()
+  const { nodes, edges } = useTopologyStore()
+
+  useEffect(() => {
+    // Spread each node so React Flow sees new object references and updates positions
+    setNodes(nodes.map((n) => ({ ...n })))
+    setEdges(edges.map((e) => ({ ...e })))
+    // Give React Flow one frame to apply the new positions before fitting
+    requestAnimationFrame(() => fitView({ padding: 0.1, duration: 300 }))
+  }, [nodes, edges, setNodes, setEdges, fitView])
+
+  return null
+}
+
 function FitViewButton() {
   const { fitView } = useReactFlow()
   return (
     <button
       onClick={() => fitView({ padding: 0.1, duration: 400 })}
       className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 bg-white rounded-lg shadow-sm border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
-      title="Fit all nodes in view"
     >
       <LayoutGrid className="w-3.5 h-3.5" />
       Fit view
@@ -90,11 +107,12 @@ export default function TopologyGraph() {
         fitViewOptions={{ padding: 0.1 }}
         minZoom={0.1}
         maxZoom={3}
-        defaultEdgeOptions={{
-          type: 'smoothstep',
-        }}
+        defaultEdgeOptions={{ type: 'smoothstep' }}
         proOptions={{ hideAttribution: true }}
       >
+        {/* Syncs store layout updates into React Flow's internal state */}
+        <LayoutSyncer />
+
         <Background gap={20} size={1} color="#e5e7eb" />
         <Controls showInteractive={false} className="!shadow-md !border !border-gray-100 !rounded-xl" />
         <MiniMap
@@ -130,7 +148,6 @@ export default function TopologyGraph() {
           style={{ width: 160, height: 100 }}
         />
 
-        {/* Top toolbar */}
         <Panel position="top-left" className="!m-3 !left-0 !top-0 flex flex-col gap-2 w-[380px]">
           <FilterPanel />
           <StatsBar />
@@ -141,10 +158,7 @@ export default function TopologyGraph() {
         </Panel>
       </ReactFlow>
 
-      {/* Node detail panel */}
       <NodeDetailPanel />
-
-      {/* Legend */}
       <Legend />
     </div>
   )
