@@ -1,0 +1,66 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html,
+  body,
+  #root {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    font-family:
+      -apple-system,
+      BlinkMacSystemFont,
+      'Segoe UI',
+      Roboto,
+      sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+/* React Flow overrides */
+.react-flow__node {
+  cursor: pointer;
+}
+
+.react-flow__edge-path {
+  cursor: default;
+}
+
+.react-flow__controls {
+  gap: 2px;
+}
+
+.react-flow__controls button {
+  border: none !important;
+  width: 28px !important;
+  height: 28px !important;
+}
+
+/* MiniMap */
+.react-flow__minimap {
+  overflow: hidden;
+}
+
+/* Smooth scrollbar */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
