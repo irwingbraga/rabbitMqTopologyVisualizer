@@ -1,49 +1,235 @@
-import type { RabbitDefinitions } from '../types'
+import type { RabbitDefinitions, RabbitExchange, RabbitQueue, RabbitBinding } from '../types'
+
+const VHOST = '/'
+
+const QUEUE_TYPES = ['classic', 'quorum', 'stream'] as const
+
+const SERVICES = [
+  'orders', 'payments', 'inventory', 'notifications', 'shipping',
+  'users', 'products', 'reviews', 'analytics', 'reporting',
+  'billing', 'subscriptions', 'catalog', 'search', 'recommendations',
+  'auth', 'sessions', 'audit', 'events', 'workflows',
+]
+
+const ACTIONS = [
+  'created', 'updated', 'deleted', 'processed', 'failed',
+  'retried', 'scheduled', 'confirmed', 'cancelled', 'completed',
+  'approved', 'rejected', 'pending', 'archived', 'synced',
+]
+
+function rand<T>(arr: readonly T[]): T {
+  return arr[Math.floor(Math.random() * arr.length)]
+}
+
+function randInt(min: number, max: number) {
+  return Math.floor(Math.random() * (max - min + 1)) + min
+}
+
+const exchanges: RabbitExchange[] = []
+const queues: RabbitQueue[] = []
+const bindings: RabbitBinding[] = []
+
+// --- Exchanges ---
+// One exchange per service × type variant
+SERVICES.forEach((service) => {
+  // Primary topic exchange per service
+  exchanges.push({
+    name: `${service}.exchange`,
+    vhost: VHOST,
+    type: 'topic',
+    durable: true,
+    auto_delete: false,
+    internal: false,
+    arguments: {},
+  })
+
+  // Direct exchange per service
+  exchanges.push({
+    name: `${service}.direct`,
+    vhost: VHOST,
+    type: 'direct',
+    durable: true,
+    auto_delete: false,
+    internal: false,
+    arguments: {},
+  })
+
+  // Dead-letter exchange (internal direct)
+  exchanges.push({
+    name: `${service}.dlx`,
+    vhost: VHOST,
+    type: 'direct',
+    durable: true,
+    auto_delete: false,
+    internal: true,
+    arguments: {},
+  })
+})
+
+// Retry exchange per service
+SERVICES.forEach((service) => {
+  exchanges.push({
+    name: `${service}.retry`,
+    vhost: VHOST,
+    type: 'topic',
+    durable: true,
+    auto_delete: false,
+    internal: false,
+    arguments: {},
+  })
+})
+
+// Shared fanout exchanges
+;['notifications.fanout', 'broadcast.fanout', 'alerts.fanout', 'metrics.fanout',
+  'logs.fanout', 'telemetry.fanout', 'integrations.fanout', 'webhooks.fanout',
+  'realtime.fanout', 'pubsub.fanout', 'system.fanout', 'platform.fanout'].forEach((name) => {
+  exchanges.push({ name, vhost: VHOST, type: 'fanout', durable: true, auto_delete: false, internal: false, arguments: {} })
+})
+
+// Shared headers exchanges
+;['events.headers', 'routing.headers', 'priority.headers', 'filtering.headers',
+  'classification.headers', 'dispatch.headers', 'versioning.headers',
+  'tenant.headers', 'region.headers', 'channel.headers'].forEach((name) => {
+  exchanges.push({ name, vhost: VHOST, type: 'headers', durable: true, auto_delete: false, internal: false, arguments: {} })
+})
+
+// --- Queues ---
+// ~15 queues per service
+SERVICES.forEach((service) => {
+  ACTIONS.forEach((action) => {
+    const qtype = rand(QUEUE_TYPES)
+    const msgs = randInt(0, 500)
+    const consumers = randInt(0, 4)
+    queues.push({
+      name: `${service}.${action}`,
+      vhost: VHOST,
+      type: qtype,
+      durable: true,
+      auto_delete: false,
+      exclusive: false,
+      arguments: qtype === 'quorum' ? { 'x-queue-type': 'quorum' } : qtype === 'stream' ? { 'x-queue-type': 'stream' } : {},
+      state: 'running',
+      consumers,
+      messages: msgs,
+      messages_ready: Math.floor(msgs * 0.85),
+      messages_unacknowledged: msgs - Math.floor(msgs * 0.85),
+    })
+  })
+
+  // Dead letter queue per service
+  queues.push({
+    name: `${service}.dead-letter`,
+    vhost: VHOST,
+    type: 'classic',
+    durable: true,
+    auto_delete: false,
+    exclusive: false,
+    arguments: {},
+    state: 'running',
+    consumers: 0,
+    messages: randInt(0, 50),
+    messages_ready: randInt(0, 50),
+    messages_unacknowledged: 0,
+  })
+})
+
+// Extra standalone queues to push past 300
+const EXTRAS = ['gateway', 'webhook', 'cron', 'batch', 'import', 'export', 'migration', 'cache']
+EXTRAS.forEach((prefix) => {
+  ACTIONS.slice(0, 8).forEach((action) => {
+    const msgs = randInt(0, 200)
+    queues.push({
+      name: `${prefix}.${action}`,
+      vhost: VHOST,
+      type: rand(QUEUE_TYPES),
+      durable: true,
+      auto_delete: false,
+      exclusive: false,
+      arguments: {},
+      state: 'running',
+      consumers: randInt(0, 3),
+      messages: msgs,
+      messages_ready: msgs,
+      messages_unacknowledged: 0,
+    })
+  })
+})
+
+// --- Bindings ---
+// Bind each service's topic exchange to its action queues
+SERVICES.forEach((service) => {
+  ACTIONS.forEach((action) => {
+    bindings.push({
+      source: `${service}.exchange`,
+      vhost: VHOST,
+      destination: `${service}.${action}`,
+      destination_type: 'queue',
+      routing_key: `${service}.${action}.*`,
+      arguments: {},
+    })
+  })
+
+  // DLX bindings
+  bindings.push({
+    source: `${service}.dlx`,
+    vhost: VHOST,
+    destination: `${service}.dead-letter`,
+    destination_type: 'queue',
+    routing_key: 'dead',
+    arguments: {},
+  })
+
+  // Cross-service: orders/payments/shipping pipe into notifications fanout
+  if (['orders', 'payments', 'shipping', 'billing'].includes(service)) {
+    bindings.push({
+      source: `${service}.exchange`,
+      vhost: VHOST,
+      destination: 'notifications.fanout',
+      destination_type: 'exchange',
+      routing_key: `${service}.#`,
+      arguments: {},
+    })
+  }
+
+  // analytics and reporting receive from all services via direct
+  ;['analytics', 'reporting', 'audit'].forEach((sink) => {
+    if (sink !== service) {
+      bindings.push({
+        source: `${service}.direct`,
+        vhost: VHOST,
+        destination: `${sink}.created`,
+        destination_type: 'queue',
+        routing_key: `${service}.event`,
+        arguments: {},
+      })
+    }
+  })
+})
+
+// Fanout → notification queues
+;['notifications.fanout', 'broadcast.fanout', 'alerts.fanout'].forEach((src) => {
+  ;['notifications.created', 'notifications.updated', 'users.created'].forEach((dest) => {
+    bindings.push({ source: src, vhost: VHOST, destination: dest, destination_type: 'queue', routing_key: '', arguments: {} })
+  })
+})
+
+// Headers bindings
+;['events.audit', 'audit.created', 'audit.updated'].forEach((dest) => {
+  bindings.push({
+    source: 'events.headers',
+    vhost: VHOST,
+    destination: dest,
+    destination_type: 'queue',
+    routing_key: '',
+    arguments: { 'x-match': 'all', level: 'audit' },
+  })
+})
 
 export const SAMPLE_DEFINITIONS: RabbitDefinitions = {
   rabbit_version: '3.12.0',
-  product_name: 'RabbitMQ (sample)',
-  vhosts: [{ name: '/' }],
-  exchanges: [
-    // Default exchange
-    { name: '', vhost: '/', type: 'direct', durable: true, auto_delete: false, internal: false, arguments: {} },
-    // Order processing
-    { name: 'orders.exchange', vhost: '/', type: 'topic', durable: true, auto_delete: false, internal: false, arguments: {} },
-    { name: 'orders.dlx', vhost: '/', type: 'direct', durable: true, auto_delete: false, internal: true, arguments: {} },
-    // Notifications
-    { name: 'notifications.fanout', vhost: '/', type: 'fanout', durable: true, auto_delete: false, internal: false, arguments: {} },
-    // Events
-    { name: 'events.headers', vhost: '/', type: 'headers', durable: true, auto_delete: false, internal: false, arguments: {} },
-    // Inventory
-    { name: 'inventory.direct', vhost: '/', type: 'direct', durable: true, auto_delete: false, internal: false, arguments: {} },
-  ],
-  queues: [
-    { name: 'orders.created', vhost: '/', type: 'quorum', durable: true, auto_delete: false, exclusive: false, arguments: { 'x-queue-type': 'quorum' }, state: 'running', consumers: 2, messages: 14, messages_ready: 12, messages_unacknowledged: 2 },
-    { name: 'orders.updated', vhost: '/', type: 'quorum', durable: true, auto_delete: false, exclusive: false, arguments: { 'x-queue-type': 'quorum' }, state: 'running', consumers: 1, messages: 3, messages_ready: 3, messages_unacknowledged: 0 },
-    { name: 'orders.cancelled', vhost: '/', type: 'classic', durable: true, auto_delete: false, exclusive: false, arguments: {}, state: 'running', consumers: 1, messages: 0, messages_ready: 0, messages_unacknowledged: 0 },
-    { name: 'orders.dead-letter', vhost: '/', type: 'classic', durable: true, auto_delete: false, exclusive: false, arguments: {}, state: 'running', consumers: 0, messages: 7, messages_ready: 7, messages_unacknowledged: 0 },
-    { name: 'notifications.email', vhost: '/', type: 'classic', durable: true, auto_delete: false, exclusive: false, arguments: {}, state: 'running', consumers: 1, messages: 0, messages_ready: 0, messages_unacknowledged: 0 },
-    { name: 'notifications.sms', vhost: '/', type: 'classic', durable: true, auto_delete: false, exclusive: false, arguments: {}, state: 'running', consumers: 1, messages: 2, messages_ready: 2, messages_unacknowledged: 0 },
-    { name: 'notifications.push', vhost: '/', type: 'classic', durable: false, auto_delete: true, exclusive: false, arguments: {}, state: 'running', consumers: 0, messages: 0, messages_ready: 0, messages_unacknowledged: 0 },
-    { name: 'inventory.stock-updates', vhost: '/', type: 'stream', durable: true, auto_delete: false, exclusive: false, arguments: { 'x-queue-type': 'stream' }, state: 'running', consumers: 3, messages: 1540, messages_ready: 1540, messages_unacknowledged: 0 },
-    { name: 'events.audit', vhost: '/', type: 'classic', durable: true, auto_delete: false, exclusive: false, arguments: {}, state: 'running', consumers: 1, messages: 22, messages_ready: 22, messages_unacknowledged: 0 },
-  ],
-  bindings: [
-    // orders.exchange → queues via topic routing
-    { source: 'orders.exchange', vhost: '/', destination: 'orders.created', destination_type: 'queue', routing_key: 'orders.created.*', arguments: {} },
-    { source: 'orders.exchange', vhost: '/', destination: 'orders.updated', destination_type: 'queue', routing_key: 'orders.updated.*', arguments: {} },
-    { source: 'orders.exchange', vhost: '/', destination: 'orders.cancelled', destination_type: 'queue', routing_key: 'orders.cancelled.*', arguments: {} },
-    // orders.exchange → notifications (exchange-to-exchange)
-    { source: 'orders.exchange', vhost: '/', destination: 'notifications.fanout', destination_type: 'exchange', routing_key: 'orders.#', arguments: {} },
-    // Dead-letter
-    { source: 'orders.dlx', vhost: '/', destination: 'orders.dead-letter', destination_type: 'queue', routing_key: 'dead', arguments: {} },
-    // Fanout → all notification queues
-    { source: 'notifications.fanout', vhost: '/', destination: 'notifications.email', destination_type: 'queue', routing_key: '', arguments: {} },
-    { source: 'notifications.fanout', vhost: '/', destination: 'notifications.sms', destination_type: 'queue', routing_key: '', arguments: {} },
-    { source: 'notifications.fanout', vhost: '/', destination: 'notifications.push', destination_type: 'queue', routing_key: '', arguments: {} },
-    // Headers exchange
-    { source: 'events.headers', vhost: '/', destination: 'events.audit', destination_type: 'queue', routing_key: '', arguments: { 'x-match': 'all', level: 'audit' } },
-    // Inventory direct
-    { source: 'inventory.direct', vhost: '/', destination: 'inventory.stock-updates', destination_type: 'queue', routing_key: 'stock.update', arguments: {} },
-  ],
+  product_name: 'RabbitMQ (large sample)',
+  vhosts: [{ name: VHOST }],
+  exchanges,
+  queues,
+  bindings,
 }

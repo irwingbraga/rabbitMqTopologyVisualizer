@@ -291,7 +291,10 @@ export function filterTopologyNodes(
     }
   })
 
-  const filteredNodes = nodes.filter((node) => visibleNodeIds.has(node.id))
+  // Spread each node so applyDagreLayout mutates copies, never the originals in allNodes
+  const filteredNodes = nodes
+    .filter((node) => visibleNodeIds.has(node.id))
+    .map((node) => ({ ...node }))
 
   const filteredEdges = edges.filter(
     (e) => visibleNodeIds.has(e.source) && visibleNodeIds.has(e.target),

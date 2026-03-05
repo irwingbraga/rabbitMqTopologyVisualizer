@@ -9,10 +9,10 @@ export default function ConnectionPanel() {
     useTopologyStore()
 
   const [mode, setMode] = useState<'api' | 'json'>('api')
-  const [url, setUrl] = useState('http://localhost:15672')
-  const [username, setUsername] = useState('guest')
-  const [password, setPassword] = useState('guest')
-  const [vhost, setVhost] = useState('')
+  const [url, setUrl] = useState(() => localStorage.getItem('rmq_url') ?? 'http://localhost:15672')
+  const [username, setUsername] = useState(() => localStorage.getItem('rmq_username') ?? 'guest')
+  const [password, setPassword] = useState(() => localStorage.getItem('rmq_password') ?? 'guest')
+  const [vhost, setVhost] = useState(() => localStorage.getItem('rmq_vhost') ?? '')
   const [showPassword, setShowPassword] = useState(false)
   const [jsonError, setJsonError] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -20,6 +20,10 @@ export default function ConnectionPanel() {
   const handleConnect = async (e: React.FormEvent) => {
     e.preventDefault()
     clearError()
+    localStorage.setItem('rmq_url', url)
+    localStorage.setItem('rmq_username', username)
+    localStorage.setItem('rmq_password', password)
+    localStorage.setItem('rmq_vhost', vhost)
     await connectToRabbitMQ({ url, username, password, vhost })
   }
 
