@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { SlidersHorizontal, Search, X, ChevronDown, ChevronUp } from 'lucide-react'
 import { useTopologyStore } from '../store/topologyStore'
 
@@ -23,6 +23,20 @@ const QUEUE_COLORS: Record<string, string> = {
 export default function FilterPanel() {
   const { filters, setFilters, topology, selectedVhost, setSelectedVhost } = useTopologyStore()
   const [open, setOpen] = useState(false)
+  // Local state for the search input — debounced before hitting the store/graph
+  const [searchInput, setSearchInput] = useState(filters.searchText)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const handleSearchChange = (value: string) => {
+    setSearchInput(value)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => setFilters({ searchText: value }), 300)
+  }
+
+  // Keep local input in sync if the filter is cleared externally (e.g. "Clear all")
+  useEffect(() => {
+    setSearchInput(filters.searchText)
+  }, [filters.searchText])
 
   const toggleExchangeType = (type: string) => {
     const current = filters.exchangeTypes
@@ -51,14 +65,14 @@ export default function FilterPanel() {
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
           <input
             type="text"
-            value={filters.searchText}
-            onChange={(e) => setFilters({ searchText: e.target.value })}
+            value={searchInput}
+            onChange={(e) => handleSearchChange(e.target.value)}
             placeholder="Search exchanges, queues..."
             className="w-full pl-8 pr-7 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-300 transition"
           />
-          {filters.searchText && (
+          {searchInput && (
             <button
-              onClick={() => setFilters({ searchText: '' })}
+              onClick={() => handleSearchChange('')}
               className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
             >
               <X className="w-3 h-3" />

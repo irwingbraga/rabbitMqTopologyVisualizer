@@ -135,15 +135,20 @@ export default function TopologyGraph() {
           style={{ width: 160, height: 100 }}
         />
 
-        <Panel position="top-left" className="!m-3 !left-0 !top-0 flex flex-col gap-2 w-[380px]">
-          <FilterPanel />
-          <StatsBar />
-        </Panel>
-
         <Panel position="top-right" className="!m-3">
           <FitViewButton />
         </Panel>
       </ReactFlow>
+
+      {/* Outside ReactFlow so remounts don't affect focus or state */}
+      <div className="absolute top-3 left-3 z-10 flex flex-col gap-2 w-[380px] pointer-events-none">
+        <div className="pointer-events-auto">
+          <FilterPanel />
+        </div>
+        <div className="pointer-events-auto">
+          <StatsBar />
+        </div>
+      </div>
 
       <NodeDetailPanel />
       <Legend />

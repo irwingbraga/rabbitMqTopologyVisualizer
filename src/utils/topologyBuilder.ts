@@ -291,10 +291,16 @@ export function filterTopologyNodes(
     }
   })
 
-  // Spread each node so applyDagreLayout mutates copies, never the originals in allNodes
+  // Only copy own properties — avoids carrying over stale React Flow internals
+  // (measured, width, height, etc.) that would prevent fresh position updates on remount
   const filteredNodes = nodes
     .filter((node) => visibleNodeIds.has(node.id))
-    .map((node) => ({ ...node }))
+    .map((node) => ({
+      id: node.id,
+      type: node.type,
+      position: { x: node.position.x, y: node.position.y },
+      data: node.data,
+    }))
 
   const filteredEdges = edges.filter(
     (e) => visibleNodeIds.has(e.source) && visibleNodeIds.has(e.target),
