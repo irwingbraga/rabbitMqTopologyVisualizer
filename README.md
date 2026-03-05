@@ -138,9 +138,26 @@ src/
 
 ## CORS Considerations
 
-When connecting to a local broker from a browser, CORS is typically not an issue since the management plugin allows cross-origin requests by default. For remote brokers with stricter CORS policies, the Vite dev server includes a proxy configuration in `vite.config.ts` that forwards requests from `/api/rabbitmq` to the target broker.
+The browser enforces CORS on all Management API requests. If the connection fails with a network error, the broker likely needs CORS configured to allow requests from the origin where the visualizer is running.
 
-For production deployments, serve the built app behind a reverse proxy (such as Nginx) and configure it to forward Management API requests to avoid CORS restrictions.
+Add the following to `rabbitmq.conf` on the broker:
+
+```
+management.cors.allow_origins.1 = http://localhost:5173
+management.cors.allow_origins.2 = https://your-username.github.io
+management.cors.max_age = 3600
+```
+
+Or to allow all origins (acceptable for internal/dev brokers):
+
+```
+management.cors.allow_origins.1 = *
+management.cors.max_age = 3600
+```
+
+Restart the broker after changing the configuration.
+
+Alternatively, for production deployments, serve the built app behind a reverse proxy (such as Nginx) on the same host and port as the management UI — same-origin requests bypass CORS entirely.
 
 ---
 

@@ -40,13 +40,25 @@ export class RabbitMQApiService {
     } catch (error) {
       if (axios.isAxiosError(error)) {
         const status = error.response?.status
+
         if (status === 401) throw new RabbitMQApiError('Authentication failed. Check username and password.', 401)
         if (status === 403) throw new RabbitMQApiError('Access denied. User may lack permissions.', 403)
         if (status === 404) throw new RabbitMQApiError(`Endpoint not found: ${path}`, 404)
-        if (error.code === 'ECONNREFUSED' || error.code === 'ERR_NETWORK') {
-          throw new RabbitMQApiError('Cannot connect to RabbitMQ. Check the URL and ensure the management plugin is enabled.')
+
+        // No response means the request never reached the server.
+        // In the browser this covers both unreachable hosts and CORS rejections
+        // (the browser blocks the response before JS can read it).
+        if (!error.response) {
+          throw new RabbitMQApiError(
+            'Could not reach the RabbitMQ management API. Possible causes:\n' +
+            '• The URL or port is wrong\n' +
+            '• The management plugin is not enabled\n' +
+            '• CORS is blocking the request — the broker must allow cross-origin requests from this origin\n' +
+            '• The broker requires HTTPS but an HTTP URL was entered',
+          )
         }
-        throw new RabbitMQApiError(error.message, status)
+
+        throw new RabbitMQApiError(`Unexpected error (HTTP ${status}): ${error.message}`, status)
       }
       throw error
     }

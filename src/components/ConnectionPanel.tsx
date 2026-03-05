@@ -173,7 +173,7 @@ export default function ConnectionPanel() {
           {error && (
             <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
               <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
-              <span>{error}</span>
+              <span className="whitespace-pre-line">{error}</span>
             </div>
           )}
 
