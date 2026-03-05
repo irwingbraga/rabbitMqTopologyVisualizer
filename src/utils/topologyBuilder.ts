@@ -214,7 +214,7 @@ export function buildTopologyGraph(
   return { nodes, edges }
 }
 
-function applyDagreLayout(nodes: Node[], edges: Edge[]) {
+export function applyDagreLayout(nodes: Node[], edges: Edge[]) {
   const g = new dagre.graphlib.Graph()
   g.setDefaultEdgeLabel(() => ({}))
   g.setGraph({ rankdir: 'LR', ranksep: 120, nodesep: 60, edgesep: 30 })
@@ -265,24 +265,33 @@ export function filterTopologyNodes(
 
   const visibleNodeIds = new Set<string>()
 
-  const filteredNodes = nodes.filter((node) => {
+  // First pass: determine which non-consumer nodes are visible
+  nodes.forEach((node) => {
     if (node.type === 'exchangeNode') {
       const data = node.data as unknown as ExchangeNodeData
-      if (exchangeTypes && exchangeTypes.length > 0 && !exchangeTypes.includes(data.exchangeType)) return false
-      if (!showInternal && data.internal) return false
-      if (search && !data.label.toLowerCase().includes(search)) return false
+      if (exchangeTypes && exchangeTypes.length > 0 && !exchangeTypes.includes(data.exchangeType)) return
+      if (!showInternal && data.internal) return
+      if (search && !data.label.toLowerCase().includes(search)) return
+      visibleNodeIds.add(node.id)
     } else if (node.type === 'queueNode') {
       const data = node.data as unknown as QueueNodeData
-      if (queueTypes && queueTypes.length > 0 && !queueTypes.includes(data.queueType)) return false
-      if (hideEmptyQueues && data.messages === 0) return false
-      if (search && !data.label.toLowerCase().includes(search)) return false
-    } else if (node.type === 'consumerNode') {
-      const data = node.data as unknown as ConsumerNodeData
-      if (search && !data.label.toLowerCase().includes(search) && !data.consumerTag.toLowerCase().includes(search)) return false
+      if (queueTypes && queueTypes.length > 0 && !queueTypes.includes(data.queueType)) return
+      if (hideEmptyQueues && data.messages === 0) return
+      if (search && !data.label.toLowerCase().includes(search)) return
+      visibleNodeIds.add(node.id)
     }
-    visibleNodeIds.add(node.id)
-    return true
   })
+
+  // Second pass: consumers follow their parent queue — visible iff the queue is visible
+  nodes.forEach((node) => {
+    if (node.type !== 'consumerNode') return
+    const parentEdge = edges.find((e) => e.target === node.id)
+    if (parentEdge && visibleNodeIds.has(parentEdge.source)) {
+      visibleNodeIds.add(node.id)
+    }
+  })
+
+  const filteredNodes = nodes.filter((node) => visibleNodeIds.has(node.id))
 
   const filteredEdges = edges.filter(
     (e) => visibleNodeIds.has(e.source) && visibleNodeIds.has(e.target),

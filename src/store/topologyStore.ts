@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import type { Node, Edge } from '@xyflow/react'
 import type { TopologyData, ConnectionSettings, RabbitDefinitions } from '../types'
 import { RabbitMQApiService } from '../services/rabbitmqApi'
-import { buildTopologyGraph, filterTopologyNodes } from '../utils/topologyBuilder'
+import { buildTopologyGraph, filterTopologyNodes, applyDagreLayout } from '../utils/topologyBuilder'
 
 export interface FilterState {
   exchangeTypes: string[]
@@ -55,6 +55,7 @@ function applyFiltersAndRebuild(
 ): { nodes: Node[]; edges: Edge[]; allNodes: Node[]; allEdges: Edge[] } {
   const { nodes: allNodes, edges: allEdges } = buildTopologyGraph(topology, vhost)
   const { nodes, edges } = filterTopologyNodes(allNodes, allEdges, filters)
+  applyDagreLayout(nodes, edges)
   return { nodes, edges, allNodes, allEdges }
 }
 
@@ -145,6 +146,8 @@ export const useTopologyStore = create<TopologyStore>((set, get) => ({
     set({ filters: merged })
     if (!topology) return
     const { nodes, edges } = filterTopologyNodes(get().allNodes, get().allEdges, merged)
+    // Re-run layout so filtered nodes compact together instead of leaving gaps
+    applyDagreLayout(nodes, edges)
     set({ nodes, edges })
   },
 
