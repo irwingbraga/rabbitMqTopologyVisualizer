@@ -8,7 +8,7 @@ if [ ! -d "node_modules" ]; then
   npm install
 fi
 
-# Open browser after a short delay
-(sleep 2 && open "http://localhost:5173") &
+# Open browser after a short delay (Vite opens on 5173)
+(sleep 3 && open "http://localhost:5173") &
 
 npm run dev

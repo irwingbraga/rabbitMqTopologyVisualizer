@@ -9,10 +9,9 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      '/api/rabbitmq': {
-        target: 'http://localhost:15672',
+      '/rabbitmq-proxy': {
+        target: 'http://localhost:3001',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/rabbitmq/, '/api'),
       },
     },
   },

@@ -22,14 +22,17 @@ export class RabbitMQApiService {
   private client: AxiosInstance
 
   constructor(baseUrl: string, username: string, password: string) {
-    // Normalize base URL
-    const normalizedUrl = baseUrl.replace(/\/$/, '')
-
+    // All requests go through the local proxy server so the browser never
+    // contacts RabbitMQ directly — this avoids CORS entirely.
     this.client = axios.create({
-      baseURL: `${normalizedUrl}/api`,
-      auth: { username, password },
+      baseURL: '/rabbitmq-proxy',
       timeout: 15000,
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-RabbitMQ-URL': baseUrl.replace(/\/$/, ''),
+        'X-RabbitMQ-User': username,
+        'X-RabbitMQ-Password': password,
+      },
     })
   }
 
