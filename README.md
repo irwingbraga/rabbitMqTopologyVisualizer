@@ -144,6 +144,21 @@ For production deployments, serve the built app behind a reverse proxy (such as 
 
 ---
 
+## Running with Docker
+
+Build and run the container:
+
+```bash
+docker build -t rabbitmq-topology-visualizer .
+docker run -p 8080:80 rabbitmq-topology-visualizer
+```
+
+Then open `http://localhost:8080`.
+
+The image uses a two-stage build — Node.js compiles the app, then only the static output is copied into a lightweight Nginx image. The final image is around 50 MB.
+
+---
+
 ## Deploying to GitHub Pages
 
 The repository includes a GitHub Actions workflow that builds and deploys the app automatically on every push to `main`.
