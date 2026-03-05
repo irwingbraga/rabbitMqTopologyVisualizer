@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from 'react'
+import { useCallback, useMemo } from 'react'
 import {
   ReactFlow,
   Background,
@@ -27,24 +27,6 @@ const nodeTypes: NodeTypes = {
   consumerNode: ConsumerNode,
 }
 
-// Runs inside <ReactFlow> so it has access to the flow instance.
-// Pushes layout changes from the store directly into React Flow's internal
-// state (which ignores position prop updates after the initial render).
-function LayoutSyncer() {
-  const { setNodes, setEdges, fitView } = useReactFlow()
-  const { nodes, edges } = useTopologyStore()
-
-  useEffect(() => {
-    // Spread each node so React Flow sees new object references and updates positions
-    setNodes(nodes.map((n) => ({ ...n })))
-    setEdges(edges.map((e) => ({ ...e })))
-    // Give React Flow one frame to apply the new positions before fitting
-    requestAnimationFrame(() => fitView({ padding: 0.1, duration: 300 }))
-  }, [nodes, edges, setNodes, setEdges, fitView])
-
-  return null
-}
-
 function FitViewButton() {
   const { fitView } = useReactFlow()
   return (
@@ -60,6 +42,13 @@ function FitViewButton() {
 
 export default function TopologyGraph() {
   const { nodes, edges, setHighlightedNodeId, highlightedNodeId } = useTopologyStore()
+
+  // Changing this key forces ReactFlow to remount with fresh Dagre positions
+  // whenever the filtered node set changes, eliminating layout gaps.
+  const flowKey = useMemo(
+    () => nodes.map((n) => n.id).join('|'),
+    [nodes],
+  )
 
   const onNodeClick: NodeMouseHandler = useCallback(
     (_event, node) => {
@@ -98,6 +87,7 @@ export default function TopologyGraph() {
   return (
     <div className="w-full h-full relative">
       <ReactFlow
+        key={flowKey}
         nodes={styledNodes}
         edges={styledEdges}
         nodeTypes={nodeTypes}
@@ -110,9 +100,6 @@ export default function TopologyGraph() {
         defaultEdgeOptions={{ type: 'smoothstep' }}
         proOptions={{ hideAttribution: true }}
       >
-        {/* Syncs store layout updates into React Flow's internal state */}
-        <LayoutSyncer />
-
         <Background gap={20} size={1} color="#e5e7eb" />
         <Controls showInteractive={false} className="!shadow-md !border !border-gray-100 !rounded-xl" />
         <MiniMap
