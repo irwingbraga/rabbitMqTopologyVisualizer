@@ -106,7 +106,7 @@ export function buildTopologyGraph(
       position: { x: 0, y: 0 },
       data: {
         label: queue.name,
-        queueType: queue.type || 'classic',
+        queueType: queue.type || (queue.arguments?.['x-queue-type'] as string) || 'classic',
         durable: queue.durable,
         autoDelete: queue.auto_delete,
         exclusive: queue.exclusive,

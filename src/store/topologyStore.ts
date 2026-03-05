@@ -105,16 +105,19 @@ export const useTopologyStore = create<TopologyStore>((set, get) => ({
 
   loadFromDefinitions: (definitions: RabbitDefinitions) => {
     const vhosts = (definitions.vhosts ?? []).map((v) => v.name)
+    // Real RabbitMQ exports often omit vhost on individual entities (single-vhost export).
+    // Fall back to the first declared vhost, or '/' if none is declared.
+    const defaultVhost = vhosts[0] ?? '/'
 
     const topology: TopologyData = {
-      exchanges: definitions.exchanges ?? [],
-      queues: definitions.queues ?? [],
-      bindings: definitions.bindings ?? [],
+      exchanges: (definitions.exchanges ?? []).map((e) => ({ ...e, vhost: e.vhost ?? defaultVhost })),
+      queues: (definitions.queues ?? []).map((q) => ({ ...q, vhost: q.vhost ?? defaultVhost })),
+      bindings: (definitions.bindings ?? []).map((b) => ({ ...b, vhost: b.vhost ?? defaultVhost })),
       consumers: [],
-      vhosts: vhosts.length > 0 ? vhosts : ['/'],
+      vhosts: vhosts.length > 0 ? vhosts : [defaultVhost],
     }
 
-    const vhost = vhosts[0] ?? '/'
+    const vhost = defaultVhost
     const { nodes, edges, allNodes, allEdges } = applyFiltersAndRebuild(
       topology,
       vhost,
